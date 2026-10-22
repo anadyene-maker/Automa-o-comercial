@@ -4,7 +4,7 @@ import pdfplumber
 import streamlit as st
 
 st.set_page_config(
-    page_title="Torre de Controle - Simulações Comerciais", layout="wide"
+    page_title="Controle - Simulações Comerciais", layout="wide"
 )
 
 st.title("📊 Torre de Controle - Simulações Comerciais")
