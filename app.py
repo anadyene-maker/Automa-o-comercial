@@ -9,32 +9,14 @@ st.set_page_config(
 
 st.title("📊 Torre de Controle - Simulações Comerciais")
 st.markdown(
-    "Arraste o PDF do simulador para preencher os dados e gravá-los"
-    " automaticamente na Planilha Google."
+    "Arraste o PDF do simulador para extrair os dados e copiá-los facilmente"
+    " para a sua Planilha Google."
 )
 
-# URL da sua Planilha Google oficial
+# Link da Planilha Google da Torre de Controle
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1jAFEvGxrHuzdqCrC8VU2bs5_d_D4u918f5UCD2JtBmw/edit"
 
-# Ligação à Planilha Google
-try:
-  conn = st.connection("gsheets", type="GsheetsConnection")
-  df_existente = conn.read(spreadsheet=URL_PLANILHA, ttl="0")
-except Exception as e:
-  df_existente = pd.DataFrame(
-      columns=[
-          "Data/Hora",
-          "Filial",
-          "Representante",
-          "Cliente",
-          "Logística OK",
-          "Verbas OK",
-          "Status Atual",
-          "Observações",
-      ]
-  )
-
-aba1, aba2 = st.tabs(["➕ Nova Simulação (Via PDF)", "📋 Painel de Acompanhamento"])
+aba1, aba2 = st.tabs(["➕ Ler PDF do Simulador", "📋 Aceder à Planilha Oficial"])
 
 with aba1:
   st.subheader("Upload do PDF do Simulador")
@@ -42,14 +24,12 @@ with aba1:
       "Arraste o ficheiro PDF enviado pelo WhatsApp", type=["pdf"]
   )
 
-  texto_pdf = ""
+  texto_extraido = ""
   if arquivo_pdf is not None:
     with pdfplumber.open(arquivo_pdf) as pdf:
       for pagina in pdf.pages:
-        texto_pdf += pagina.extract_text() or ""
-    st.success(
-        "PDF lido com sucesso! Verifique e ajuste os campos abaixo se necessário:"
-    )
+        texto_extraido += pagina.extract_text() or ""
+    st.success("PDF lido com sucesso pela nuvem!")
 
   with st.form("form_simulacao"):
     col1, col2 = st.columns(2)
@@ -60,10 +40,8 @@ with aba1:
       representante = st.text_input("Nome do Representante")
       cliente = st.text_input("Nome do Cliente")
     with col2:
-      logistica_ok = st.checkbox(
-          "Logística OK (Frete Automático / RS Metropolitano verificado)"
-      )
-      verbas_ok = st.checkbox("Verbas OK (Verba promotor / saldo conferido)")
+      logistica_ok = st.checkbox("Logística OK (Verificado)")
+      verbas_ok = st.checkbox("Verbas OK (Verificado)")
       status_atual = st.selectbox(
           "Status Atual do Processo",
           [
@@ -78,51 +56,42 @@ with aba1:
       )
 
     obs = st.text_area(
-        "Observações / Resumo extraído do PDF",
-        value=texto_pdf[:400] if texto_pdf else "",
+        "Detalhes / Texto extraído do PDF",
+        value=texto_extraido[:400] if texto_extraido else "",
     )
 
-    botao_enviar = st.form_submit_button("Salvar na Planilha Google")
+    botao_gerar = st.form_submit_button("Gerar Linha para a Planilha")
 
-    if botao_enviar:
+    if botao_gerar:
       if representante and cliente:
-        nova_linha = pd.DataFrame(
-            [{
-                "Data/Hora": datetime.datetime.now().strftime(
-                    "%d/%m/%Y %H:%M"
-                ),
-                "Filial": filial,
-                "Representante": representante,
-                "Cliente": cliente,
-                "Logística OK": "Sim" if logistica_ok else "Não",
-                "Verbas OK": "Sim" if verbas_ok else "Não",
-                "Status Atual": status_atual,
-                "Observações": obs,
-            }]
+        st.success(
+            "Dados prontos! Copie os dados abaixo ou abra a planilha para colar"
+            " na sua linha:"
         )
-
-        try:
-          df_atualizado = pd.concat(
-              [df_existente, nova_linha], ignore_index=True
-          )
-          conn.update(spreadsheet=URL_PLANILHA, data=df_atualizado)
-          st.success("Simulação guardada na Planilha Google com sucesso!")
-        except Exception as e:
-          st.error(
-              "Erro ao atualizar a planilha. Certifique-se de que a partilha"
-              " da planilha permite edição: "
-              f"{e}"
-          )
+        data_hoje = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+        linha_texto = (
+            f"{data_hoje} \t {filial} \t {representante} \t {cliente} \t"
+            f" {'Sim' if logistica_ok else 'Não'} \t"
+            f" {'Sim' if verbas_ok else 'Não'} \t {status_atual} \t {obs}"
+        )
+        st.code(linha_texto, language="text")
+        st.info(
+            "💡 Dica: Basta copiar o texto acima e colar diretamente na sua"
+            " primeira linha vazia da planilha!"
+        )
       else:
         st.warning("Por favor, preencha pelo menos o Representante e o Cliente.")
 
 with aba2:
-  st.subheader("Painel Geral de Acompanhamento")
-  try:
-    df_dados = conn.read(spreadsheet=URL_PLANILHA, ttl="0")
-    if not df_dados.empty:
-      st.dataframe(df_dados, use_container_width=True)
-    else:
-      st.info("Ainda não há simulações registadas.")
-  except Exception as e:
-    st.info("A carregar dados da planilha...")
+  st.subheader("Planilha de Controle")
+  st.markdown(
+      "Pode abrir a sua Planilha Google oficial diretamente no botão abaixo para"
+      " consultar ou colar os dados:"
+  )
+  st.markdown(
+      "[🔗 Abrir Torre de Controle - Simulações Comerciais no Google"
+      f" Sheets]({URL_PLANILHA})"
+  )
+
+  # Incorpora a planilha diretamente na página se o navegador permitir
+  st.components.v1.iframe(URL_PLANILHA.replace("/edit", "/preview"), height=600)
