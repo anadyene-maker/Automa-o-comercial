@@ -1,22 +1,26 @@
 import datetime
+import json
 import re
 import pandas as pd
 import pdfplumber
+import requests
 import streamlit as st
 
 st.set_page_config(
     page_title="Torre de Controle - Simulações Comerciais", layout="wide"
 )
 
-st.title("📊 Torre de Controle - Simulações Comerciais")
+st.title("📊Controle - Simulações Comerciais")
 st.markdown(
-    "Arraste o PDF do simulador e o sistema preenche os campos e gera a linha"
-    " para a planilha automaticamente!"
+    "Arraste o PDF do simulador e clique em enviar para gravar direto na sua"
+    " planilha do Google Drive!"
 )
 
+# Cole aqui a URL de Web App do Google Apps Script que gerou no Passo 1:
+URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyOUlNVz3lEXiFr3QpYmosYno2ulAO80jK8QPTL2eq1sLYyWFhZh1-oFSAwzcuE3hZf/exec"
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1jAFEvGxrHuzdqCrC8VU2bs5_d_D4u918f5UCD2JtBmw/edit"
 
-aba1, aba2 = st.tabs(["➕ Ler PDF do Simulador", "📋 Aceder à Planilha Oficial"])
+aba1, aba2 = st.tabs(["➕ Enviar PDF para a Planilha", "📋 Ver Planilha Oficial"])
 
 with aba1:
   st.subheader("Upload do PDF do Simulador")
@@ -34,8 +38,6 @@ with aba1:
       for pagina in pdf.pages:
         texto_extraido += pagina.extract_text() or ""
 
-    # Extração inteligente dos dados do PDF da Semalo
-    # 1. Filial
     if "FILIAL SC" in texto_extraido.upper():
       filial_extraida = "Filial SC"
     elif "FILIAL RS" in texto_extraido.upper():
@@ -43,47 +45,25 @@ with aba1:
     elif "FILIAL PR" in texto_extraido.upper():
       filial_extraida = "Filial PR"
 
-    # 2. Representante / Supervisor
     match_rep = re.search(
         r"Supervisor\s*/\s*RCA\s*[:|\n]?\s*([^\n]+)", texto_extraido
     )
     if match_rep:
       rep_extraido = match_rep.group(1).strip()
 
-    # 3. Cliente
     match_cli = re.search(
         r"Cliente\s*[:|\n]?\s*([^\n]+)", texto_extraido, re.IGNORECASE
     )
     if match_cli:
       cliente_extraido = match_cli.group(1).strip()
 
-    st.success(
-        "PDF lido e campos preenchidos automaticamente pela inteligência do"
-        " sistema!"
-    )
+    st.success("PDF lido com sucesso! Dados extraídos automaticamente.")
 
-  with st.form("form_simulacao"):
+  with st.form("form_envio_direto"):
     col1, col2 = st.columns(2)
     with col1:
       filial = st.selectbox(
-          "Filial",
-          [
-              "Filial PR",
-              "Filial RS",
-              "Filial SC",
-              "Filial SP",
-              "Filial MS",
-              "Outras",
-          ],
-          index=(
-              0
-              if filial_extraida == "Filial PR"
-              else (
-                  1
-                  if filial_extraida == "Filial RS"
-                  else 2 if filial_extraida == "Filial SC" else 0
-              )
-          ),
+          "Filial", ["Filial PR", "Filial RS", "Filial SC", "Outras"]
       )
       representante = st.text_input(
           "Nome do Representante", value=rep_extraido
@@ -106,29 +86,44 @@ with aba1:
       )
 
     obs = st.text_area(
-        "Resumo do Pedido / Dados do PDF",
-        value=texto_extraido[:400] if texto_extraido else "",
+        "Resumo do PDF", value=texto_extraido[:300] if texto_extraido else ""
     )
 
-    botao_gerar = st.form_submit_button("Gerar Linha para a Planilha")
+    botao_enviar = st.form_submit_button(
+        "🚀 Enviar Direto para a Planilha do Google"
+    )
 
-    if botao_gerar:
-      if representante and cliente:
-        st.success(
-            "Pronto! Copie a linha abaixo e cole diretamente na sua planilha:"
-        )
-        data_hoje = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
-        linha_texto = (
-            f"{data_hoje} \t {filial} \t {representante} \t {cliente} \t"
-            f" {'Sim' if logistica_ok else 'Não'} \t"
-            f" {'Sim' if verbas_ok else 'Não'} \t {status_atual} \t {obs}"
-        )
-        st.code(linha_texto, language="text")
+    if botao_enviar:
+      if representante and cliente and URL_APPS_SCRIPT.startswith("https://"):
+        payload = {
+            "dataHora": datetime.datetime.now().strftime("%d/%m/%Y %H:%M"),
+            "filial": filial,
+            "representante": representante,
+            "cliente": cliente,
+            "logistica": "Sim" if logistica_ok else "Não",
+            "verbas": "Sim" if verbas_ok else "Não",
+            "status": status_atual,
+            "obs": obs,
+        }
+        try:
+          resposta = requests.post(URL_APPS_SCRIPT, json=payload)
+          if resposta.status_code == 200:
+            st.success(
+                "✨ Sucesso! A linha foi inserida automaticamente na sua"
+                " Planilha Google!"
+            )
+          else:
+            st.error("Erro ao comunicar com o Google Sheets.")
+        except Exception as e:
+          st.error(f"Erro de conexão: {e}")
       else:
-        st.warning("Aguardando o upload do PDF para preencher os dados.")
+        st.warning(
+            "Por favor, certifique-se de que o PDF foi lido e a URL do Apps"
+            " Script foi configurada no código."
+        )
 
 with aba2:
-  st.subheader("Planilha de Controle")
+  st.subheader("Visualizar Planilha Oficial")
   st.markdown(
       "[🔗 Abrir Torre de Controle - Simulações Comerciais no Google"
       f" Sheets]({URL_PLANILHA})"
