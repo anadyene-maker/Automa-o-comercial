@@ -16,7 +16,7 @@ st.markdown(
     " simulador) e envia para a planilha!"
 )
 
-URL_APPS_SCRIPT = "COLE_A_SUA_URL_DO_WEB_APP_AQUI"
+URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyOUlNVz3lEXiFr3QpYmosYno2ulAO80jK8QPTL2eq1sLYyWFhZh1-oFSAwzcuE3hZf/exec"
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1jAFEvGxrHuzdqCrC8VU2bs5_d_D4u918f5UCD2JtBmw/edit"
 
 aba1, aba2 = st.tabs(["➕ Enviar PDF para a Planilha", "📋 Ver Planilha Oficial"])
