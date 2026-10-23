@@ -7,16 +7,17 @@ import requests
 import streamlit as st
 
 st.set_page_config(
-    page_title="Controle - Simulações Comerciais", layout="wide"
+    page_title="Torre de Controle - Simulações Comerciais", layout="wide"
 )
 
 st.title("📊 Torre de Controle - Simulações Comerciais")
 st.markdown(
-    "Arraste o PDF do simulador, o sistema extrai os dados (incluindo o"
-    " simulador) e envia para a planilha!"
+    "Arraste o PDF do simulador, o sistema extrai os dados limpos e envia para"
+    " a planilha!"
 )
 
-URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyOUlNVz3lEXiFr3QpYmosYno2ulAO80jK8QPTL2eq1sLYyWFhZh1-oFSAwzcuE3hZf/exec"
+# Cole aqui a sua URL do Web App do Google Apps Script:
+URL_APPS_SCRIPT = "COLE_A_SUA_URL_DO_WEB_APP_AQUI"
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1jAFEvGxrHuzdqCrC8VU2bs5_d_D4u918f5UCD2JtBmw/edit"
 
 aba1, aba2 = st.tabs(["➕ Enviar PDF para a Planilha", "📋 Ver Planilha Oficial"])
@@ -32,6 +33,7 @@ with aba1:
   rep_extraido = ""
   cliente_extraido = ""
   simulador_extraido = ""
+  resumo_produtos = ""
 
   if arquivo_pdf is not None:
     with pdfplumber.open(arquivo_pdf) as pdf:
@@ -67,22 +69,13 @@ with aba1:
     if match_sim:
       simulador_extraido = match_sim.group(1).strip()
 
-    # Limpar texto de observações (removendo o bloco de endereço da Semalo)
-    obs_limpa = re.sub(
-        r"SEMALO IND E COMERCIO.*?(?=Lançamento|Usuário|Status|$)",
-        "",
-        texto_extraido,
-        flags=re.DOTALL | re.IGNORECASE,
-    )
-    obs_limpa = re.sub(
-        r"Av\. Guaicurus,.*?(?=Lançamento|Usuário|$)",
-        "",
-        obs_limpa,
-        flags=re.DOTALL | re.IGNORECASE,
-    )
-    obs_limpa = "\n".join([line for line in obs_limpa.split("\n") if line.strip()])
+    # Isolar apenas trechos relevantes de produtos ou observações, cortando o cabeçalho da Semalo
+    if "Resumo" in texto_extraido:
+      partes = texto_extraido.split("Resumo")
+      if len(partes) > 1:
+        resumo_produtos = partes[-1].strip()[:200]
 
-    st.success("PDF lido com sucesso! Dados extraídos com inteligência.")
+    st.success("PDF lido com sucesso! Dados extraídos e limpos.")
 
   with st.form("form_envio_direto"):
     col1, col2 = st.columns(2)
@@ -114,8 +107,9 @@ with aba1:
       )
 
     obs = st.text_area(
-        "Observações / Resumo limpo",
-        value=obs_limpa[:300] if "obs_limpa" in locals() else "",
+        "Observações (Deixe em branco ou escreva notas rápidas)",
+        value="",
+        placeholder="Ex: Falar com financeiro / Verba negociada direto com o gerente",
     )
 
     botao_enviar = st.form_submit_button(
@@ -139,7 +133,7 @@ with aba1:
           resposta = requests.post(URL_APPS_SCRIPT, json=payload)
           if resposta.status_code == 200:
             st.success(
-                "✨ Sucesso! Simulador e dados gravados na Planilha Google!"
+                "✨ Sucesso! Linha limpa e enviada para a Planilha Google!"
             )
           else:
             st.error("Erro ao comunicar com o Google Sheets.")
