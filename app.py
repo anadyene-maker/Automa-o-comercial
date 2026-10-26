@@ -16,7 +16,7 @@ st.markdown(
     " para a planilha!"
 )
 
-URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyOU1NVz3lEXiFr3qPymosYno2ulA080jK8QPTL2eq1sLYwFhZh1-oFSAwzcuE3hZf/exec"
+URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyOUlNVz3lEXiFr3QpYmosYno2ulAO80jK8QPTL2eq1sLYyWFhZh1-oFSAwzcuE3hZf/exec"
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1jAFEvGxrHuzdqCrC8VU2bs5_d_D4u918f5UCD2JtBmw/edit"
 
 aba1, aba2 = st.tabs(
