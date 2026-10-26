@@ -5,96 +5,51 @@ import pandas as pd
 import pdfplumber
 import requests
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(
     page_title="Controle - Simulações Comerciais", layout="wide"
 )
 
-st.title("📊Controle - Simulações Comerciais")
+st.title("📊 Torre de Controle - Simulações Comerciais")
 st.markdown(
-    "Arraste o PDF do simulador, o sistema extrai os dados limpos e envia para"
-    " a planilha!"
+    "Arraste **vários PDFs** de uma só vez, o sistema processa todos e atualiza"
+    " a planilha automaticamente!"
 )
 
 # Cole aqui a sua URL do Web App do Google Apps Script:
-URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyOUlNVz3lEXiFr3QpYmosYno2ulAO80jK8QPTL2eq1sLYyWFhZh1-oFSAwzcuE3hZf/exec"
+URL_APPS_SCRIPT = "COLE_A_SUA_URL_DO_WEB_APP_AQUI"
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1jAFEvGxrHuzdqCrC8VU2bs5_d_D4u918f5UCD2JtBmw/edit"
 
-aba1, aba2 = st.tabs(["➕ Enviar PDF para a Planilha", "📋 Ver Planilha Oficial"])
+# Atualização automática da tabela a cada 15 segundos (sem precisar de F5)
+st_autorefresh(interval=15000, key="datarefresh")
+
+aba1, aba2 = st.tabs(
+    ["➕ Enviar Múltiplos PDFs", "📋 Tabela Atualizada em Tempo Real"]
+)
 
 with aba1:
-  st.subheader("Upload do PDF do Simulador")
-  arquivo_pdf = st.file_uploader(
-      "Arraste o ficheiro PDF enviado pelo WhatsApp", type=["pdf"]
+  st.subheader("Upload em Lote de PDFs")
+  # accept_multiple_files=True permite selecionar vários ficheiros de uma vez
+  arquivos_pdf = st.file_uploader(
+      "Selecione ou arraste vários ficheiros PDF",
+      type=["pdf"],
+      accept_multiple_files=True,
   )
 
-  texto_extraido = ""
-  filial_extraida = "Filial PR"
-  rep_extraido = ""
-  cliente_extraido = ""
-  simulador_extraido = ""
-  resumo_produtos = ""
+  if arquivos_pdf:
+    st.info(f"📁 {len(arquivos_pdf)} ficheiro(s) selecionado(s) para envio.")
 
-  if arquivo_pdf is not None:
-    with pdfplumber.open(arquivo_pdf) as pdf:
-      for pagina in pdf.pages:
-        texto_extraido += pagina.extract_text() or ""
-
-    # Extrair Filial
-    if "FILIAL SC" in texto_extraido.upper():
-      filial_extraida = "Filial SC"
-    elif "FILIAL RS" in texto_extraido.upper():
-      filial_extraida = "Filial RS"
-    elif "FILIAL PR" in texto_extraido.upper():
-      filial_extraida = "Filial PR"
-
-    # Extrair Representante
-    match_rep = re.search(
-        r"Supervisor\s*/\s*RCA\s*[:|\n]?\s*([^\n]+)", texto_extraido
-    )
-    if match_rep:
-      rep_extraido = match_rep.group(1).strip()
-
-    # Extrair Cliente
-    match_cli = re.search(
-        r"Cliente\s*[:|\n]?\s*([^\n]+)", texto_extraido, re.IGNORECASE
-    )
-    if match_cli:
-      cliente_extraido = match_cli.group(1).strip()
-
-    # Extrair Número do Simulador
-    match_sim = re.search(
-        r"Simulador\s*[:|\n]?\s*(\d+)", texto_extraido, re.IGNORECASE
-    )
-    if match_sim:
-      simulador_extraido = match_sim.group(1).strip()
-
-    # Isolar apenas trechos relevantes de produtos ou observações, cortando o cabeçalho da Semalo
-    if "Resumo" in texto_extraido:
-      partes = texto_extraido.split("Resumo")
-      if len(partes) > 1:
-        resumo_produtos = partes[-1].strip()[:200]
-
-    st.success("PDF lido com sucesso! Dados extraídos e limpos.")
-
-  with st.form("form_envio_direto"):
+  with st.form("form_envio_lote"):
     col1, col2 = st.columns(2)
     with col1:
-      filial = st.selectbox(
-          "Filial", ["Filial PR", "Filial RS", "Filial SC", "Outras"]
-      )
-      representante = st.text_input(
-          "Nome do Representante", value=rep_extraido
-      )
-      cliente = st.text_input("Nome do Cliente", value=cliente_extraido)
-      num_simulador = st.text_input(
-          "Nº do Simulador", value=simulador_extraido
+      filial_padrao = st.selectbox(
+          "Filial Padrão para o Lote",
+          ["Filial PR", "Filial RS", "Filial SC", "Outras"],
       )
     with col2:
-      logistica_ok = st.checkbox("Logística OK (Verificado)")
-      verbas_ok = st.checkbox("Verbas OK (Verificado)")
       status_atual = st.selectbox(
-          "Status Atual do Processo",
+          "Status Atual do Processo (para todos)",
           [
               "1 - Em Triagem (Ana)",
               "2 - Com Gerente / Niko (IA)",
@@ -106,49 +61,94 @@ with aba1:
           ],
       )
 
-    obs = st.text_area(
-        "Observações (Deixe em branco ou escreva notas rápidas)",
-        value="",
-        placeholder="Ex: Falar com financeiro / Verba negociada direto com o gerente",
+    logistica_ok = st.checkbox("Logística OK (Verificado para todos)")
+    verbas_ok = st.checkbox("Verbas OK (Verificado para todos)")
+
+    botao_enviar_lote = st.form_submit_button(
+        "🚀 Enviar Todos os PDFs para a Planilha"
     )
 
-    botao_enviar = st.form_submit_button(
-        "🚀 Enviar Direto para a Planilha do Google"
-    )
-
-    if botao_enviar:
-      if representante and cliente and URL_APPS_SCRIPT.startswith("https://"):
-        payload = {
-            "dataHora": datetime.datetime.now().strftime("%d/%m/%Y %H:%M"),
-            "filial": filial,
-            "representante": representante,
-            "cliente": cliente,
-            "simulador": num_simulador,
-            "logistica": "Sim" if logistica_ok else "Não",
-            "verbas": "Sim" if verbas_ok else "Não",
-            "status": status_atual,
-            "obs": obs,
-        }
-        try:
-          resposta = requests.post(URL_APPS_SCRIPT, json=payload)
-          if resposta.status_code == 200:
-            st.success(
-                "✨ Sucesso! Linha limpa e enviada para a Planilha Google!"
-            )
-          else:
-            st.error("Erro ao comunicar com o Google Sheets.")
-        except Exception as e:
-          st.error(f"Erro de conexão: {e}")
-      else:
+    if botao_enviar_lote:
+      if not arquivos_pdf:
         st.warning(
-            "Por favor, verifique se preencheu o Representante, Cliente e a"
-            " URL do Apps Script."
+            "Por favor, selecione pelo menos um ficheiro PDF antes de enviar."
+        )
+      elif not URL_APPS_SCRIPT.startswith("https://"):
+        st.warning("Por favor, configure a URL do Apps Script no código.")
+      else:
+        barra_progresso = st.progress(0)
+        sucessos = 0
+
+        for i, arquivo_pdf in enumerate(arquivos_pdf):
+          texto_extraido = ""
+          with pdfplumber.open(arquivo_pdf) as pdf:
+            for pagina in pdf.pages:
+              texto_extraido += pagina.extract_text() or ""
+
+          # Extrações automáticas por PDF
+          filial_extraida = filial_padrao
+          if "FILIAL SC" in texto_extraido.upper():
+            filial_extraida = "Filial SC"
+          elif "FILIAL RS" in texto_extraido.upper():
+            filial_extraida = "Filial RS"
+          elif "FILIAL PR" in texto_extraido.upper():
+            filial_extraida = "Filial PR"
+
+          match_rep = re.search(
+              r"Supervisor\s*/\s*RCA\s*[:|\n]?\s*([^\n]+)", texto_extraido
+          )
+          rep_extraido = match_rep.group(1).strip() if match_rep else "N/D"
+
+          match_cli = re.search(
+              r"Cliente\s*[:|\n]?\s*([^\n]+)", texto_extraido, re.IGNORECASE
+          )
+          cliente_extraido = (
+              match_cli.group(1).strip() if match_cli else "N/D"
+          )
+
+          match_sim = re.search(
+              r"Simulador\s*[:|\n]?\s*(\d+)", texto_extraido, re.IGNORECASE
+          )
+          simulador_extraido = match_sim.group(1).strip() if match_sim else ""
+
+          payload = {
+              "dataHora": datetime.datetime.now().strftime("%d/%m/%Y %H:%M"),
+              "filial": filial_extraida,
+              "representante": rep_extraido,
+              "cliente": cliente_extraido,
+              "simulador": simulador_extraido,
+              "logistica": "Sim" if logistica_ok else "Não",
+              "verbas": "Sim" if verbas_ok else "Não",
+              "status": status_atual,
+              "obs": "",
+          }
+
+          try:
+            resposta = requests.post(URL_APPS_SCRIPT, json=payload)
+            if resposta.status_code == 200:
+              sucessos += 1
+          except Exception:
+            pass
+
+          barra_progresso.progress((i + 1) / len(arquivos_pdf))
+
+        st.success(
+            f"✨ Concluído! {sucessos} de {len(arquivos_pdf)} simuladores foram"
+            " enviados com sucesso para a planilha!"
         )
 
 with aba2:
-  st.subheader("Visualizar Planilha Oficial")
+  st.subheader("📋 Tabela Atualizada Automaticamente")
   st.markdown(
-      "[🔗 Abrir Torre de Controle - Simulações Comerciais no Google"
-      f" Sheets]({URL_PLANILHA})"
+      f"[🔗 Abrir Planilha Completa no Google Drive]({URL_PLANILHA})"
   )
-  st.components.v1.iframe(URL_PLANILHA.replace("/edit", "/preview"), height=600)
+
+  try:
+    csv_url = "https://docs.google.com/spreadsheets/d/1jAFEvGxrHuzdqCrC8VU2bs5_d_D4u918f5UCD2JtBmw/export?format=csv"
+    df = pd.read_csv(csv_url)
+    st.dataframe(df, use_container_width=True, height=500)
+  except Exception:
+    st.info(
+        "Certifique-se de que a planilha está partilhada com permissão de"
+        " leitura."
+    )
