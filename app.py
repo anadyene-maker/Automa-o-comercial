@@ -7,7 +7,7 @@ import requests
 import streamlit as st
 
 st.set_page_config(
-    page_title="Controle - Simulações Comerciais", layout="wide"
+    page_title="TControle - Simulações Comerciais", layout="wide"
 )
 
 st.title("📊 Controle - Simulações Comerciais")
@@ -16,8 +16,7 @@ st.markdown(
     " para a planilha!"
 )
 
-# ⚠️ COLE A SUA URL DO APPS SCRIPT AQUI ENTRE AS ASPAS:
-URL_APPS_SCRIPT = "AKfycbyOUlNVz3lEXiFr3QpYmosYno2ulAO80jK8QPTL2eq1sLYyWFhZh1-oFSAwzcuE3hZf"
+URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyOU1NVz3lEXiFr3qPymosYno2ulA080jK8QPTL2eq1sLYwFhZh1-oFSAwzcuE3hZf/exec"
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1jAFEvGxrHuzdqCrC8VU2bs5_d_D4u918f5UCD2JtBmw/edit"
 
 aba1, aba2 = st.tabs(
@@ -39,9 +38,7 @@ with aba1:
     )
 
   with st.form("form_envio_automatico"):
-    st.markdown(
-        "**Configurações padrão para os PDFs enviados:**"
-    )
+    st.markdown("**Configurações padrão para os PDFs enviados:**")
     col1, col2 = st.columns(2)
     with col1:
       status_atual = st.selectbox(
@@ -57,9 +54,7 @@ with aba1:
           ],
       )
     with col2:
-      logistica_ok = st.checkbox(
-          "Logística OK (Verificado)", value=False
-      )
+      logistica_ok = st.checkbox("Logística OK (Verificado)", value=False)
       verbas_ok = st.checkbox("Verbas OK (Verificado)", value=False)
 
     botao_enviar = st.form_submit_button(
@@ -69,11 +64,6 @@ with aba1:
     if botao_enviar:
       if not arquivos_pdf:
         st.warning("Por favor, selecione pelo menos um ficheiro PDF.")
-      elif not URL_APPS_SCRIPT.startswith("https://"):
-        st.warning(
-            "Por favor, configure a sua URL real do Apps Script no código"
-            " (substitua o texto 'COLE_A_SUA_URL_DO_WEB_APP_AQUI')."
-        )
       else:
         barra_progresso = st.progress(0)
         sucessos = 0
