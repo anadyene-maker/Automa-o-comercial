@@ -16,7 +16,7 @@ st.markdown(
     " para a planilha!"
 )
 
-URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyOUlNVz3lEXiFr3QpYmosYno2ulAO80jK8QPTL2eq1sLYyWFhZh1-oFSAwzcuE3hZf/exec"
+URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyOU1NVz3lEXiFr3qPymosYno2ulA080jK8QPTL2eq1sLYwFhZh1-oFSAwzcuE3hZf/exec"
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1jAFEvGxrHuzdqCrC8VU2bs5_d_D4u918f5UCD2JtBmw/edit"
 
 aba1, aba2 = st.tabs(
@@ -77,7 +77,6 @@ with aba1:
           except Exception:
             pass
 
-          # 1. Filial automática
           filial_extraida = "Filial PR"
           if "FILIAL SC" in texto_extraido.upper():
             filial_extraida = "Filial SC"
@@ -86,13 +85,11 @@ with aba1:
           elif "FILIAL PR" in texto_extraido.upper():
             filial_extraida = "Filial PR"
 
-          # 2. Representante automático
           match_rep = re.search(
               r"Supervisor\s*/\s*RCA\s*[:|\n]?\s*([^\n]+)", texto_extraido
           )
           rep_extraido = match_rep.group(1).strip() if match_rep else "N/D"
 
-          # 3. Cliente automático
           match_cli = re.search(
               r"Cliente\s*[:|\n]?\s*([^\n]+)", texto_extraido, re.IGNORECASE
           )
@@ -100,7 +97,6 @@ with aba1:
               match_cli.group(1).strip() if match_cli else "N/D"
           )
 
-          # 4. Número do Simulador automático
           match_sim = re.search(
               r"Simulador\s*[:|\n]?\s*(\d+)", texto_extraido, re.IGNORECASE
           )
@@ -138,16 +134,20 @@ with aba2:
       f"[🔗 Abrir Planilha Completa no Google Drive]({URL_PLANILHA})"
   )
 
-  # Botão seguro para carregar os dados sem travar o arranque da aplicação
   if st.button("🔄 Carregar / Atualizar Dados da Tabela"):
     try:
-      csv_url = "https://docs.google.com/spreadsheets/d/1jAFEvGxrHuzdqCrC8VU2bs5_d_D4u918f5UCD2JtBmw/export?format=csv"
-      df = pd.read_csv(csv_url)
-      st.dataframe(df, use_container_width=True, height=500)
+      # Puxa os dados direto pelo canal seguro do Apps Script (sem erro 401)
+      resposta = requests.get(URL_APPS_SCRIPT, timeout=10)
+      if resposta.status_code == 200:
+        dados = resposta.json()
+        if len(dados) > 1:
+          df = pd.DataFrame(dados[1:], columns=dados[0])
+          st.dataframe(df, use_container_width=True, height=500)
+        else:
+          st.info("A planilha ainda está vazia.")
+      else:
+        st.error("Erro ao comunicar com o Google Sheets.")
     except Exception as e:
-      st.error(f"Não foi possível carregar os dados no momento: {e}")
+      st.error(f"Erro ao carregar dados: {e}")
   else:
-    st.info(
-        "Clique no botão acima para carregar a tabela atualizada da folha"
-        " do Google."
-    )
+    st.info("Clique no botão acima para carregar os dados atualizados.")
