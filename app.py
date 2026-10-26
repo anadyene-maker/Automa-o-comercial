@@ -5,7 +5,6 @@ import pandas as pd
 import pdfplumber
 import requests
 import streamlit as st
-from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(
     page_title="Controle - Simulações Comerciais", layout="wide"
@@ -13,16 +12,13 @@ st.set_page_config(
 
 st.title("📊 Torre de Controle - Simulações Comerciais")
 st.markdown(
-    "Arraste **vários PDFs** de uma só vez, o sistema processa todos e atualiza"
-    " a planilha automaticamente!"
+    "Arraste **vários PDFs** de uma só vez, o sistema processa todos e envia para"
+    " a planilha!"
 )
 
 # Cole aqui a sua URL do Web App do Google Apps Script:
 URL_APPS_SCRIPT = "COLE_A_SUA_URL_DO_WEB_APP_AQUI"
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1jAFEvGxrHuzdqCrC8VU2bs5_d_D4u918f5UCD2JtBmw/edit"
-
-# Atualização automática da tabela a cada 15 segundos (sem precisar de F5)
-st_autorefresh(interval=15000, key="datarefresh")
 
 aba1, aba2 = st.tabs(
     ["➕ Enviar Múltiplos PDFs", "📋 Tabela Atualizada em Tempo Real"]
@@ -30,7 +26,6 @@ aba1, aba2 = st.tabs(
 
 with aba1:
   st.subheader("Upload em Lote de PDFs")
-  # accept_multiple_files=True permite selecionar vários ficheiros de uma vez
   arquivos_pdf = st.file_uploader(
       "Selecione ou arraste vários ficheiros PDF",
       type=["pdf"],
@@ -85,7 +80,6 @@ with aba1:
             for pagina in pdf.pages:
               texto_extraido += pagina.extract_text() or ""
 
-          # Extrações automáticas por PDF
           filial_extraida = filial_padrao
           if "FILIAL SC" in texto_extraido.upper():
             filial_extraida = "Filial SC"
@@ -138,10 +132,15 @@ with aba1:
         )
 
 with aba2:
-  st.subheader("📋 Tabela Atualizada Automaticamente")
-  st.markdown(
-      f"[🔗 Abrir Planilha Completa no Google Drive]({URL_PLANILHA})"
-  )
+  st.subheader("📋 Tabela em Tempo Real")
+  col_a, col_b = st.columns([3, 1])
+  with col_a:
+    st.markdown(
+        f"[🔗 Abrir Planilha Completa no Google Drive]({URL_PLANILHA})"
+    )
+  with col_b:
+    if st.button("🔄 Atualizar Tabela"):
+      st.rerun()
 
   try:
     csv_url = "https://docs.google.com/spreadsheets/d/1jAFEvGxrHuzdqCrC8VU2bs5_d_D4u918f5UCD2JtBmw/export?format=csv"
@@ -149,6 +148,5 @@ with aba2:
     st.dataframe(df, use_container_width=True, height=500)
   except Exception:
     st.info(
-        "Certifique-se de que a planilha está partilhada com permissão de"
-        " leitura."
+        "Certifique-se de que a planilha está partilhada para leitura."
     )
