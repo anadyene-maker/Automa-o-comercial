@@ -119,7 +119,6 @@ with aba1:
           }
 
           try:
-            # Adicionado timeout de 10 segundos para evitar travamentos
             resposta = requests.post(URL_APPS_SCRIPT, json=payload, timeout=10)
             if resposta.status_code == 200:
               sucessos += 1
@@ -135,21 +134,20 @@ with aba1:
 
 with aba2:
   st.subheader("📋 Tabela em Tempo Real")
-  col_a, col_b = st.columns([3, 1])
-  with col_a:
-    st.markdown(
-        f"[🔗 Abrir Planilha Completa no Google Drive]({URL_PLANILHA})"
-    )
-  with col_b:
-    if st.button("🔄 Atualizar Tabela"):
-      st.rerun()
+  st.markdown(
+      f"[🔗 Abrir Planilha Completa no Google Drive]({URL_PLANILHA})"
+  )
 
-  try:
-    csv_url = "https://docs.google.com/spreadsheets/d/1jAFEvGxrHuzdqCrC8VU2bs5_d_D4u918f5UCD2JtBmw/export?format=csv"
-    df = pd.read_csv(csv_url)
-    st.dataframe(df, use_container_width=True, height=500)
-  except Exception:
+  # Botão seguro para carregar os dados sem travar o arranque da aplicação
+  if st.button("🔄 Carregar / Atualizar Dados da Tabela"):
+    try:
+      csv_url = "https://docs.google.com/spreadsheets/d/1jAFEvGxrHuzdqCrC8VU2bs5_d_D4u918f5UCD2JtBmw/export?format=csv"
+      df = pd.read_csv(csv_url)
+      st.dataframe(df, use_container_width=True, height=500)
+    except Exception as e:
+      st.error(f"Não foi possível carregar os dados no momento: {e}")
+  else:
     st.info(
-        "Certifique-se de que a planilha está partilhada para leitura pública"
-        " ou via Web App."
+        "Clique no botão acima para carregar a tabela atualizada da folha"
+        " do Google."
     )
