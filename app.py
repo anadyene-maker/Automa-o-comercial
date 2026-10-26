@@ -1,36 +1,34 @@
 import datetime
 import json
 import re
+import time
 import pandas as pd
 import pdfplumber
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
 
-# Configuração da página
 st.set_page_config(page_title="Torre de Controle Comercial", layout="wide")
 
-# Estilo visual limpo e moderno
 st.markdown(
     """
     <style>
     .block-container { padding-top: 1.5rem; padding-bottom: 2rem; }
-    div[data-testid="stExpander"] { border: 1px solid #e0e0e0; border-radius: 8px; }
     </style>
 """,
     unsafe_allow_html=True,
 )
 
-# Conexões já configuradas (não precisa mexer)
-URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyOU1NVz3lEXiFr3QpYmosYno2ulAO80jK8QPTL2eq1sLYyWFhZh1-oFSAwzcuE3hZf/exec"
+# URL corrigida com 'l' minúsculo em OUlNV exatamente como no seu Apps Script:
+URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyOUlNVz3lEXiFr3QpYmosYno2ulAO80jK8QPTL2eq1sLYyWFhZh1-oFSAwzcuE3hZf/exec"
 ID_PLANILHA = "1jAFEvGxrHuzdqCrC8VU2bs5_d_D4u918f5UCD2JtBmw"
 URL_PLANILHA = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA}/edit"
 
 if "refresh_key" not in st.session_state:
-  st.session_state.refresh_key = 0
+  st.session_state.refresh_key = int(time.time())
 
 
-# --- FUNÇÃO DE LEITURA AUTOMÁTICA DO PDF ---
+# --- FUNÇÃO DE LEITURA AUTOMÁTICA E LIMPA DO PDF ---
 def extrair_dados_pdf(arquivo):
   texto = ""
   try:
@@ -42,7 +40,7 @@ def extrair_dados_pdf(arquivo):
 
   texto_up = texto.upper()
 
-  # 1. Detecta a Filial sozinho (procura por Filial ou pela UF da cidade do RCA/Cliente)
+  # 1. Detecta a Filial sozinho
   filial = "Filial PR"
   if "FILIAL SC" in texto_up or " UF SC" in texto_up or "/SC" in texto_up:
     filial = "Filial SC"
@@ -51,19 +49,35 @@ def extrair_dados_pdf(arquivo):
   elif "FILIAL PR" in texto_up or " UF PR" in texto_up or "/PR" in texto_up:
     filial = "Filial PR"
 
-  # 2. Detecta Representante / Gerente
+  # 2. Detecta Representante / Gerente (e remove o texto de Cidade/UF que vinha grudado)
   match_rep = re.search(
       r"(?:Supervisor\s*/\s*RCA|Representante|Vendedor|GER\.)\s*[:|\n]?\s*([^\n]+)",
       texto,
       re.IGNORECASE,
   )
-  rep = match_rep.group(1).strip() if match_rep else "Não identificado"
+  if match_rep:
+    rep = match_rep.group(0).strip()
+    rep = re.split(r"\s+Cidade\s+", rep, flags=re.IGNORECASE)[0].strip()
+    rep = re.sub(
+        r"^(?:Supervisor\s*/\s*RCA|Representante|Vendedor)\s*[:|-]?\s*",
+        "",
+        rep,
+        flags=re.IGNORECASE,
+    ).strip()
+  else:
+    rep = "Não identificado"
 
-  # 3. Detecta Cliente
+  # 3. Detecta Cliente (e limpa o texto 'ORDEM DE COMPRA' do final)
   match_cli = re.search(r"Cliente\s*[:|\n]?\s*([^\n]+)", texto, re.IGNORECASE)
-  cliente = match_cli.group(1).strip() if match_cli else "Não identificado"
+  if match_cli:
+    cliente = match_cli.group(1).strip()
+    cliente = re.split(r"\s+ORDEM\s+DE\s+COMPRA", cliente, flags=re.IGNORECASE)[
+        0
+    ].strip()
+  else:
+    cliente = "Não identificado"
 
-  # 4. Detecta Nº do Simulador (no texto ou no próprio nome do arquivo PDF)
+  # 4. Detecta Nº do Simulador
   match_sim = re.search(r"Simulador\s*[:|\n]?\s*(\d+)", texto, re.IGNORECASE)
   if match_sim:
     simulador = match_sim.group(1).strip()
@@ -97,7 +111,8 @@ st.divider()
 # --- PASSO 1: UPLOAD E CONFERÊNCIA AUTOMÁTICA ---
 st.subheader("1. Selecionar e Conferir PDFs")
 arquivos = st.file_uploader(
-    "Selecione um ou vários arquivos PDF na sua pasta (segure Ctrl ou Shift para selecionar vários)",
+    "Selecione um ou vários arquivos PDF na sua pasta (segure Ctrl ou Shift"
+    " para selecionar vários)",
     type=["pdf"],
     accept_multiple_files=True,
 )
@@ -116,7 +131,6 @@ if arquivos:
     df_preview = pd.DataFrame(dados_lidos)
     st.dataframe(df_preview, use_container_width=True, hide_index=True)
 
-    # Opções rápidas em uma única linha limpa
     c1, c2, c3, c4 = st.columns([2, 1, 1, 2])
     with c1:
       status_lote = st.selectbox(
@@ -143,12 +157,14 @@ if arquivos:
       )
 
     if st.button(
-        f"🚀 Confirmar e Enviar {len(dados_lidos)} Simulador(es) para a Planilha",
+        f"🚀 Confirmar e Enviar {len(dados_lidos)} Simulador(es) para a"
+        " Planilha",
         type="primary",
         use_container_width=True,
     ):
       progresso = st.progress(0)
       enviados = 0
+      ultimo_erro = ""
 
       for idx, item in enumerate(dados_lidos):
         payload = {
@@ -163,16 +179,36 @@ if arquivos:
             "obs": obs_lote,
         }
         try:
-          r = requests.post(URL_APPS_SCRIPT, json=payload, timeout=15)
-          if r.status_code == 200:
+          # Envio em formato text/plain para evitar bloqueio de redirecionamento do Google
+          r = requests.post(
+              URL_APPS_SCRIPT,
+              data=json.dumps(payload),
+              headers={"Content-Type": "text/plain; charset=utf-8"},
+              timeout=20,
+              allow_redirects=True,
+          )
+          if r.status_code == 200 and "error" not in r.text.lower():
             enviados += 1
-        except Exception:
-          pass
+          else:
+            ultimo_erro = f"Status {r.status_code} - Resposta: {r.text[:150]}"
+        except Exception as e:
+          ultimo_erro = str(e)
+
         progresso.progress((idx + 1) / len(dados_lidos))
 
-      # Força a planilha de baixo a recarregar sozinha na mesma hora
-      st.session_state.refresh_key += 1
-      st.success(f"✅ Pronto! {enviados} simulador(es) gravado(s) com sucesso!")
+      # Aguarda 1 segundo para o Google gravar e força a atualização da tabela lá embaixo
+      time.sleep(1)
+      st.session_state.refresh_key = int(time.time())
+
+      if enviados > 0:
+        st.success(
+            f"✅ Pronto! {enviados} de {len(dados_lidos)} simulador(es)"
+            " gravado(s) com sucesso na planilha!"
+        )
+      else:
+        st.error(
+            f"❌ O Google recusou a gravação. Detalhe técnico: {ultimo_erro}"
+        )
 
 st.divider()
 
@@ -182,7 +218,9 @@ with col_p1:
   st.subheader("2. Planilha em Tempo Real")
 with col_p2:
   if st.button("🔄 Atualizar Visualização", use_container_width=True):
-    st.session_state.refresh_key += 1
+    st.session_state.refresh_key = int(time.time())
+    st.rerun()
 
-url_planilha_ao_vivo = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA}/preview?rm=minimal&v={st.session_state.refresh_key}"
+# Carrega a planilha com carimbo de tempo único para obrigar o navegador a mostrar os dados novos
+url_planilha_ao_vivo = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA}/htmlembed?single=true&widget=false&headers=false&v={st.session_state.refresh_key}"
 components.iframe(url_planilha_ao_vivo, height=600, scrolling=True)
