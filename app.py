@@ -7,10 +7,10 @@ import requests
 import streamlit as st
 
 st.set_page_config(
-    page_title="TControle - Simulações Comerciais", layout="wide"
+    page_title="Torre de Controle - Simulações Comerciais", layout="wide"
 )
 
-st.title("📊 Controle - Simulações Comerciais")
+st.title("📊 Torre de Controle - Simulações Comerciais")
 st.markdown(
     "Arraste **vários PDFs** de uma só vez. O robô extrai tudo sozinho e envia"
     " para a planilha!"
@@ -70,9 +70,12 @@ with aba1:
 
         for i, arquivo_pdf in enumerate(arquivos_pdf):
           texto_extraido = ""
-          with pdfplumber.open(arquivo_pdf) as pdf:
-            for pagina in pdf.pages:
-              texto_extraido += pagina.extract_text() or ""
+          try:
+            with pdfplumber.open(arquivo_pdf) as pdf:
+              for pagina in pdf.pages:
+                texto_extraido += pagina.extract_text() or ""
+          except Exception:
+            pass
 
           # 1. Filial automática
           filial_extraida = "Filial PR"
@@ -116,7 +119,8 @@ with aba1:
           }
 
           try:
-            resposta = requests.post(URL_APPS_SCRIPT, json=payload)
+            # Adicionado timeout de 10 segundos para evitar travamentos
+            resposta = requests.post(URL_APPS_SCRIPT, json=payload, timeout=10)
             if resposta.status_code == 200:
               sucessos += 1
           except Exception:
