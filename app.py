@@ -19,8 +19,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# URL corrigida com 'l' minúsculo em OUlNV exatamente como no seu Apps Script:
-URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyOUlNVz3lEXiFr3QpYmosYno2ulAO80jK8QPTL2eq1sLYyWFhZh1-oFSAwzcuE3hZf/exec"
+# URL padrão e ID da Planilha
+URL_PADRAO_SCRIPT = "https://script.google.com/macros/s/AKfycbyOUlNVz3lEXiFr3QpYmosYno2ulAO80jK8QPTL2eq1sLYyWFhZh1-oFSAwzcuE3hZf/exec"
 ID_PLANILHA = "1jAFEvGxrHuzdqCrC8VU2bs5_d_D4u918f5UCD2JtBmw"
 URL_PLANILHA = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA}/edit"
 
@@ -28,7 +28,7 @@ if "refresh_key" not in st.session_state:
   st.session_state.refresh_key = int(time.time())
 
 
-# --- FUNÇÃO DE LEITURA AUTOMÁTICA E LIMPA DO PDF ---
+# --- FUNÇÃO DE LEITURA AUTOMÁTICA DO PDF ---
 def extrair_dados_pdf(arquivo):
   texto = ""
   try:
@@ -40,7 +40,7 @@ def extrair_dados_pdf(arquivo):
 
   texto_up = texto.upper()
 
-  # 1. Detecta a Filial sozinho
+  # 1. Filial
   filial = "Filial PR"
   if "FILIAL SC" in texto_up or " UF SC" in texto_up or "/SC" in texto_up:
     filial = "Filial SC"
@@ -49,7 +49,7 @@ def extrair_dados_pdf(arquivo):
   elif "FILIAL PR" in texto_up or " UF PR" in texto_up or "/PR" in texto_up:
     filial = "Filial PR"
 
-  # 2. Detecta Representante / Gerente (e remove o texto de Cidade/UF que vinha grudado)
+  # 2. Representante / Gerente
   match_rep = re.search(
       r"(?:Supervisor\s*/\s*RCA|Representante|Vendedor|GER\.)\s*[:|\n]?\s*([^\n]+)",
       texto,
@@ -67,7 +67,7 @@ def extrair_dados_pdf(arquivo):
   else:
     rep = "Não identificado"
 
-  # 3. Detecta Cliente (e limpa o texto 'ORDEM DE COMPRA' do final)
+  # 3. Cliente
   match_cli = re.search(r"Cliente\s*[:|\n]?\s*([^\n]+)", texto, re.IGNORECASE)
   if match_cli:
     cliente = match_cli.group(1).strip()
@@ -77,7 +77,7 @@ def extrair_dados_pdf(arquivo):
   else:
     cliente = "Não identificado"
 
-  # 4. Detecta Nº do Simulador
+  # 4. Nº do Simulador
   match_sim = re.search(r"Simulador\s*[:|\n]?\s*(\d+)", texto, re.IGNORECASE)
   if match_sim:
     simulador = match_sim.group(1).strip()
@@ -105,6 +105,12 @@ with col_link:
       URL_PLANILHA,
       use_container_width=True,
   )
+
+# Opção na própria tela para colar/testar a URL sem precisar voltar no GitHub
+with st.expander("⚙️ Configuração da Conexão (Clique se precisar ajustar a URL)"):
+  url_script_ativa = st.text_input(
+      "URL do App da Web (Apps Script):", value=URL_PADRAO_SCRIPT
+  ).strip()
 
 st.divider()
 
@@ -164,7 +170,7 @@ if arquivos:
     ):
       progresso = st.progress(0)
       enviados = 0
-      ultimo_erro = ""
+      detalhe_erro = ""
 
       for idx, item in enumerate(dados_lidos):
         payload = {
@@ -179,36 +185,35 @@ if arquivos:
             "obs": obs_lote,
         }
         try:
-          # Envio em formato text/plain para evitar bloqueio de redirecionamento do Google
+          # Envia acompanhando o redirecionamento padrão do Google Apps Script
           r = requests.post(
-              URL_APPS_SCRIPT,
+              url_script_ativa,
               data=json.dumps(payload),
               headers={"Content-Type": "text/plain; charset=utf-8"},
               timeout=20,
               allow_redirects=True,
           )
-          if r.status_code == 200 and "error" not in r.text.lower():
+          if r.status_code in [200, 302]:
             enviados += 1
           else:
-            ultimo_erro = f"Status {r.status_code} - Resposta: {r.text[:150]}"
+            detalhe_erro = f"Status HTTP {r.status_code} | Resposta: {r.text[:200]}"
         except Exception as e:
-          ultimo_erro = str(e)
+          detalhe_erro = str(e)
 
         progresso.progress((idx + 1) / len(dados_lidos))
 
-      # Aguarda 1 segundo para o Google gravar e força a atualização da tabela lá embaixo
-      time.sleep(1)
+      time.sleep(1.5)
       st.session_state.refresh_key = int(time.time())
 
       if enviados > 0:
         st.success(
             f"✅ Pronto! {enviados} de {len(dados_lidos)} simulador(es)"
-            " gravado(s) com sucesso na planilha!"
+            " enviado(s) com sucesso!"
         )
+        time.sleep(1)
+        st.rerun()
       else:
-        st.error(
-            f"❌ O Google recusou a gravação. Detalhe técnico: {ultimo_erro}"
-        )
+        st.error(f"❌ Falha na comunicação com o Apps Script: {detalhe_erro}")
 
 st.divider()
 
@@ -221,6 +226,6 @@ with col_p2:
     st.session_state.refresh_key = int(time.time())
     st.rerun()
 
-# Carrega a planilha com carimbo de tempo único para obrigar o navegador a mostrar os dados novos
-url_planilha_ao_vivo = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA}/htmlembed?single=true&widget=false&headers=false&v={st.session_state.refresh_key}"
+# Volta para o link /preview que abriu corretamente na sua tela anterior
+url_planilha_ao_vivo = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA}/preview?v={st.session_state.refresh_key}"
 components.iframe(url_planilha_ao_vivo, height=600, scrolling=True)
