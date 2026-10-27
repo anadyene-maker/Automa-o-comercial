@@ -8,7 +8,7 @@ import requests
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Torre de Controle Comercial", layout="wide")
+st.set_page_config(page_title="Controle Comercial", layout="wide")
 
 st.markdown(
     """
@@ -19,8 +19,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# URL padrão e ID da Planilha
-URL_PADRAO_SCRIPT = "https://script.google.com/macros/s/AKfycbyOUlNVz3lEXiFr3QpYmosYno2ulAO80jK8QPTL2eq1sLYyWFhZh1-oFSAwzcuE3hZf/exec"
+# Conexões fixas em segundo plano (não ocupam espaço no ecrã)
+URL_SCRIPT_ATIVA = "https://script.google.com/macros/s/AKfycbyOUlNVz3lEXiFr3QpYmosYno2ulAO80jK8QPTL2eq1sLYyWFhZh1-oFSAwzcuE3hZf/exec"
 ID_PLANILHA = "1jAFEvGxrHuzdqCrC8VU2bs5_d_D4u918f5UCD2JtBmw"
 URL_PLANILHA = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA}/edit"
 
@@ -106,15 +106,9 @@ with col_link:
       use_container_width=True,
   )
 
-# Opção na própria tela para colar/testar a URL sem precisar voltar no GitHub
-with st.expander("⚙️ Configuração da Conexão (Clique se precisar ajustar a URL)"):
-  url_script_ativa = st.text_input(
-      "URL do App da Web (Apps Script):", value=URL_PADRAO_SCRIPT
-  ).strip()
-
 st.divider()
 
-# --- PASSO 1: UPLOAD E CONFERÊNCIA AUTOMÁTICA ---
+# --- PASSO 1: UPLOAD, CONFERÊNCIA INTELIGENTE E EDIÇÃO ---
 st.subheader("1. Selecionar e Conferir PDFs")
 arquivos = st.file_uploader(
     "Selecione um ou vários arquivos PDF na sua pasta (segure Ctrl ou Shift"
@@ -131,16 +125,37 @@ if arquivos:
       dados_lidos.append(info)
 
   if dados_lidos:
-    st.markdown(
-        "**Confira abaixo o que o sistema leu automaticamente dos seus PDFs:**"
-    )
     df_preview = pd.DataFrame(dados_lidos)
-    st.dataframe(df_preview, use_container_width=True, hide_index=True)
 
+    # Mini-resumo rápido do lote por Filial
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("📄 Total no Lote", len(df_preview))
+    m2.metric(
+        "🌲 Filial PR", len(df_preview[df_preview["Filial"] == "Filial PR"])
+    )
+    m3.metric(
+        "🏖️ Filial SC", len(df_preview[df_preview["Filial"] == "Filial SC"])
+    )
+    m4.metric(
+        "🧉 Filial RS", len(df_preview[df_preview["Filial"] == "Filial RS"])
+    )
+
+    # Detetor de duplicados no mesmo lote
+    duplicados = df_preview[
+        df_preview.duplicated(subset=["Simulador"], keep=False)
+    ]
+    if not duplicados.empty:
+      sims_dup = ", ".join(duplicados["Simulador"].unique())
+      st.warning(
+          "⚠️ Atenção: Os seguintes simuladores estão repetidos neste lote:"
+          f" **{sims_dup}**"
+      )
+
+    # Opções padrão que preenchem a tabela editável automaticamente
     c1, c2, c3, c4 = st.columns([2, 1, 1, 2])
     with c1:
-      status_lote = st.selectbox(
-          "Status Inicial",
+      status_padrao = st.selectbox(
+          "Status Padrão para o Lote",
           [
               "1 - Em Triagem (Ana)",
               "2 - Com Gerente / Niko (IA)",
@@ -153,17 +168,56 @@ if arquivos:
       )
     with c2:
       st.write("")
-      log_ok = st.checkbox("Logística OK", value=True)
+      log_padrao = st.checkbox("Logística OK (Todos)", value=True)
     with c3:
       st.write("")
-      verba_ok = st.checkbox("Verbas OK", value=True)
+      verba_padrao = st.checkbox("Verbas OK (Todos)", value=True)
     with c4:
-      obs_lote = st.text_input(
-          "Observação (Opcional)", placeholder="Ex: Verificando com RCA..."
+      obs_padrao = st.text_input(
+          "Observação Padrão", placeholder="Opcional..."
       )
 
+    # Adiciona as colunas na tabela para poder alterar linha por linha se quiser
+    df_preview["Logística OK"] = log_padrao
+    df_preview["Verbas OK"] = verba_padrao
+    df_preview["Status"] = status_padrao
+    df_preview["Observação"] = obs_padrao
+
+    st.markdown(
+        "**💡 Dica:** Se precisar de mudar o status, filial ou observação de"
+        " apenas um cliente, dê dois cliques diretamente na célula da tabela"
+        " abaixo antes de enviar:"
+    )
+
+    # Tabela interativa estilo Excel
+    df_editado = st.data_editor(
+        df_preview,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Filial": st.column_config.SelectboxColumn(
+                "Filial",
+                options=["Filial PR", "Filial SC", "Filial RS"],
+                required=True,
+            ),
+            "Status": st.column_config.SelectboxColumn(
+                "Status",
+                options=[
+                    "1 - Em Triagem (Ana)",
+                    "2 - Com Gerente / Niko (IA)",
+                    "3 - Pendente Verba Manual (Kauê)",
+                    "4 - Pronto para Gerar no Sankhya",
+                    "5 - Gerado com Sucesso no Sankhya",
+                    "❌ Travado - Limite Financeiro",
+                    "❌ Travado - Divergência",
+                ],
+                required=True,
+            ),
+        },
+    )
+
     if st.button(
-        f"🚀 Confirmar e Enviar {len(dados_lidos)} Simulador(es) para a"
+        f"🚀 Confirmar e Enviar {len(df_editado)} Simulador(es) para a"
         " Planilha",
         type="primary",
         use_container_width=True,
@@ -172,22 +226,21 @@ if arquivos:
       enviados = 0
       detalhe_erro = ""
 
-      for idx, item in enumerate(dados_lidos):
+      for idx, item in df_editado.iterrows():
         payload = {
             "dataHora": datetime.datetime.now().strftime("%d/%m/%Y %H:%M"),
             "filial": item["Filial"],
             "representante": item["Representante"],
             "cliente": item["Cliente"],
             "simulador": item["Simulador"],
-            "logistica": "Sim" if log_ok else "Não",
-            "verbas": "Sim" if verba_ok else "Não",
-            "status": status_lote,
-            "obs": obs_lote,
+            "logistica": "Sim" if item["Logística OK"] else "Não",
+            "verbas": "Sim" if item["Verbas OK"] else "Não",
+            "status": item["Status"],
+            "obs": item["Observação"],
         }
         try:
-          # Envia acompanhando o redirecionamento padrão do Google Apps Script
           r = requests.post(
-              url_script_ativa,
+              URL_SCRIPT_ATIVA,
               data=json.dumps(payload),
               headers={"Content-Type": "text/plain; charset=utf-8"},
               timeout=20,
@@ -196,28 +249,27 @@ if arquivos:
           if r.status_code in [200, 302]:
             enviados += 1
           else:
-            detalhe_erro = f"Status HTTP {r.status_code} | Resposta: {r.text[:200]}"
+            detalhe_erro = f"Status HTTP {r.status_code}"
         except Exception as e:
           detalhe_erro = str(e)
 
-        progresso.progress((idx + 1) / len(dados_lidos))
+        progresso.progress((idx + 1) / len(df_editado))
 
       time.sleep(1.5)
       st.session_state.refresh_key = int(time.time())
 
       if enviados > 0:
         st.success(
-            f"✅ Pronto! {enviados} de {len(dados_lidos)} simulador(es)"
-            " enviado(s) com sucesso!"
+            f"✅ Pronto! {enviados} simulador(es) enviado(s) com sucesso!"
         )
         time.sleep(1)
         st.rerun()
       else:
-        st.error(f"❌ Falha na comunicação com o Apps Script: {detalhe_erro}")
+        st.error(f"❌ Falha na comunicação: {detalhe_erro}")
 
 st.divider()
 
-# --- PASSO 2: PLANILHA SEMPRE VISÍVEL EMBAIXO ---
+# --- PASSO 2: PLANILHA SEMPRE VISÍVEL EM BAIXO ---
 col_p1, col_p2 = st.columns([4, 1])
 with col_p1:
   st.subheader("2. Planilha em Tempo Real")
@@ -226,6 +278,5 @@ with col_p2:
     st.session_state.refresh_key = int(time.time())
     st.rerun()
 
-# Volta para o link /preview que abriu corretamente na sua tela anterior
 url_planilha_ao_vivo = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA}/preview?v={st.session_state.refresh_key}"
 components.iframe(url_planilha_ao_vivo, height=600, scrolling=True)
