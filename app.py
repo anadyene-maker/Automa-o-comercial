@@ -23,21 +23,23 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- LINKS E CONEXÕES ---
+# --- LINKS E CONEXÕES DO HUB ---
 URL_SCRIPT_ATIVA = "https://script.google.com/macros/s/AKfycbyOUlNVz3lEXiFr3QpYmosYno2ulAO80jK8QPTL2eq1sLYyWFhZh1-oFSAwzcuE3hZf/exec"
+
+# 1. Planilha de Simuladores
 ID_PLANILHA_SIMULADORES = "1jAFEvGxrHuzdqCrC8VU2bs5_d_D4u918f5UCD2JtBmw"
 URL_PLANILHA_SIMULADORES = (
     f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_SIMULADORES}/edit"
 )
 
-# Se a planilha de Demandas for em outro arquivo ou tiver um GID (aba) específico, você pode colar o link completo aqui:
-LINK_PADRAO_DEMANDAS = "https://docs.google.com/spreadsheets/d/1CWIF-pJ2W6FKR4LN3fhj3IhjEvM7q7muF3j3uZFmT0o/edit"
+# 2. Planilha de Demandas (Link direto para abrir em outra aba)
+URL_PLANILHA_DEMANDAS = "https://docs.google.com/spreadsheets/d/1CWIF-pJ2W6FKR4LN3fhj3IhjEvM7q7muF3j3uZFmT0o/edit"
+ID_PLANILHA_DEMANDAS = "1CWIF-pJ2W6FKR4LN3fhj3IhjEvM7q7muF3j3uZFmT0o"
 
 # --- MEMÓRIA DO SISTEMA (SESSION STATE) ---
 if "refresh_key" not in st.session_state:
   st.session_state.refresh_key = int(time.time())
 
-# Chave dinâmica para limpar o file_uploader automaticamente após o envio
 if "uploader_key" not in st.session_state:
   st.session_state.uploader_key = 0
 
@@ -115,7 +117,6 @@ def extrair_dados_pdf(arquivo):
 def limpar_texto_pdf(texto):
   if pd.isna(texto):
     return ""
-  # Remove emojis e caracteres fora do padrão latin-1 para não quebrar a fonte do PDF
   return (
       str(texto)
       .encode("latin-1", "ignore")
@@ -129,7 +130,6 @@ def gerar_pdf_gerencia(df_filtrado, nome_filial):
   pdf = FPDF(orientation="L", unit="mm", format="A4")
   pdf.add_page()
 
-  # Cabeçalho do Relatório
   pdf.set_font("Helvetica", "B", 15)
   pdf.set_text_color(30, 58, 138)
   pdf.cell(
@@ -151,7 +151,6 @@ def gerar_pdf_gerencia(df_filtrado, nome_filial):
   )
   pdf.ln(4)
 
-  # Cabeçalho da Tabela
   pdf.set_fill_color(44, 62, 80)
   pdf.set_text_color(255, 255, 255)
   pdf.set_font("Helvetica", "B", 9)
@@ -170,7 +169,6 @@ def gerar_pdf_gerencia(df_filtrado, nome_filial):
     pdf.cell(larg, 8, col, border=1, fill=True, align="C")
   pdf.ln()
 
-  # Linhas da Tabela
   pdf.set_text_color(0, 0, 0)
   pdf.set_font("Helvetica", "", 8)
 
@@ -203,19 +201,26 @@ def gerar_pdf_gerencia(df_filtrado, nome_filial):
   return bytes(pdf.output())
 
 
-# --- CABEÇALHO DO APP ---
-col_t1, col_t2 = st.columns([3, 1])
+# --- CABEÇALHO DO APP COM OS DOIS BOTÕES DE ACESSO ---
+col_t1, col_b1, col_b2 = st.columns([2, 1, 1])
 with col_t1:
   st.title("💼 Hub Comercial Sul — Gestão & Demandas")
-with col_t2:
+with col_b1:
   st.write("")
   st.link_button(
-      "📂 Abrir Google Sheets Completo",
+      "📂 Abrir Planilha Simuladores",
       URL_PLANILHA_SIMULADORES,
       use_container_width=True,
   )
+with col_b2:
+  st.write("")
+  st.link_button(
+      "📂 Abrir Planilha Demandas",
+      URL_PLANILHA_DEMANDAS,
+      use_container_width=True,
+  )
 
-# --- NAVEGAÇÃO PRINCIPAL (TUDO NO MESMO LINK) ---
+# --- NAVEGAÇÃO PRINCIPAL (ABAS) ---
 aba_sim, aba_demandas, aba_pdf = st.tabs([
     "🚀 1. Envio & Controle de Simuladores",
     "📌 2. Registro de Demandas (Gerência/RCA)",
@@ -228,7 +233,6 @@ aba_sim, aba_demandas, aba_pdf = st.tabs([
 with aba_sim:
   st.subheader("Selecionar e Conferir Simuladores (PDF)")
 
-  # A chave dinâmica uploader_key limpa os arquivos automaticamente após o envio!
   arquivos = st.file_uploader(
       "Selecione um ou vários arquivos PDF na sua pasta (segure Ctrl ou Shift"
       " para vários)",
@@ -247,7 +251,6 @@ with aba_sim:
     if dados_lidos:
       df_preview = pd.DataFrame(dados_lidos)
 
-      # Mini-resumo rápido por Filial
       m1, m2, m3, m4 = st.columns(4)
       m1.metric("📄 Total no Lote", len(df_preview))
       m2.metric(
@@ -260,7 +263,6 @@ with aba_sim:
           "🧉 Filial RS", len(df_preview[df_preview["Filial"] == "Filial RS"])
       )
 
-      # Detector de duplicados
       duplicados = df_preview[
           df_preview.duplicated(subset=["Simulador"], keep=False)
       ]
@@ -365,7 +367,6 @@ with aba_sim:
           progresso.progress((idx + 1) / len(df_editado))
 
         if enviados > 0:
-          # Guarda na memória para uso rápido no PDF e limpa a barra de upload!
           st.session_state.ultimos_enviados = pd.concat(
               [st.session_state.ultimos_enviados, df_editado], ignore_index=True
           )
@@ -394,36 +395,18 @@ with aba_sim:
   components.iframe(url_sim_ao_vivo, height=600, scrolling=True)
 
 # ==============================================================================
-# ABA 2: REGISTRO DE DEMANDAS DA GERÊNCIA / RCA (EDITÁVEL DIRETO NO APP)
+# ABA 2: REGISTRO DE DEMANDAS DA GERÊNCIA / RCA (LIMPA E INTEGRADA)
 # ==============================================================================
 with aba_demandas:
   st.subheader("📌 Registro de Demandas da Gerência / RCA")
   st.markdown(
-      "Você pode **marcar os checkboxes de Concluído, mudar Status e digitar"
-      " observações diretamente na tabela abaixo**, sem sair do aplicativo:"
+      "Acompanhe e gerencie as solicitações abaixo ou use o botão superior"
+      " para abrir em outra aba:"
   )
 
-  with st.expander(
-      "🔗 Configurar Link da Aba/Planilha de Demandas (se estiver em outro"
-      " arquivo)"
-  ):
-    url_demandas_input = st.text_input(
-        "Cole aqui o link da sua planilha de Registro de Demandas:",
-        value=LINK_PADRAO_DEMANDAS,
-    ).strip()
-
-  # Transforma o link em modo de edição limpa (rm=minimal) para poder editar dentro do Streamlit
-  if "/edit" in url_demandas_input:
-    partes = url_demandas_input.split("/edit")
-    # Preserva o #gid=... caso seja uma aba específica
-    gid_hash = ""
-    if "#gid=" in partes[1]:
-      gid_hash = "#gid=" + partes[1].split("#gid=")[1]
-    url_demandas_embed = f"{partes[0]}/edit?rm=minimal{gid_hash}"
-  else:
-    url_demandas_embed = url_demandas_input
-
-  components.iframe(url_demandas_embed, height=750, scrolling=True)
+  ID_PLANILHA_DEMANDAS = "1CWIF-pJ2W6FKR4LN3fhj3IhjEvM7q7muF3j3uZFmT0o"
+  URL_DEMANDAS_AO_VIVO = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_DEMANDAS}/preview?v={st.session_state.refresh_key}"
+  components.iframe(URL_DEMANDAS_AO_VIVO, height=750, scrolling=True)
 
 # ==============================================================================
 # ABA 3: GERADOR DE RELATÓRIO EM PDF POR FILIAL PARA OS GERENTES
@@ -435,7 +418,6 @@ with aba_pdf:
       " simuladores para enviar ao gerente da região."
   )
 
-  # Tenta buscar os dados completos da planilha (via Apps Script ou CSV) ou usa os lotes enviados na sessão
   df_relatorio = pd.DataFrame()
   try:
     r_get = requests.get(URL_SCRIPT_ATIVA, timeout=8)
@@ -449,7 +431,6 @@ with aba_pdf:
   if df_relatorio.empty and not st.session_state.ultimos_enviados.empty:
     df_relatorio = st.session_state.ultimos_enviados.copy()
 
-  # Renomeia colunas caso venham da planilha com nomes ligeiramente diferentes
   col_map = {}
   for c in df_relatorio.columns:
     c_low = str(c).lower()
@@ -471,8 +452,7 @@ with aba_pdf:
   if df_relatorio.empty:
     st.info(
         "💡 Nenhum dado carregado ainda nesta sessão. Assim que você enviar um"
-        " lote de PDFs na Aba 1 (ou se a leitura da planilha estiver ativa), os"
-        " dados aparecerão aqui automaticamente para gerar o PDF!"
+        " lote de PDFs na Aba 1, os dados aparecerão aqui automaticamente!"
     )
   else:
     col_f1, col_f2 = st.columns(2)
